@@ -124,7 +124,6 @@
         .checkout-btn { width: 100%; background: #000; color: #fff; border: none; border-radius: 40px; padding: 15px; font-size: 15px; font-weight: 700; cursor: pointer; }
         .checkout-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-
         .loading { display: inline-block; width: 16px; height: 16px; border: 2px solid #f3f3f3; border-top: 2px solid #000; border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
@@ -148,9 +147,6 @@
         </button>
         <div class="nav-logo">Илюша Фларед</div>
         <div class="nav-right">
-            
-                
-            </a>
             <button class="nav-btn" id="wishBtn">
                 <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
                 <span class="nav-badge hidden" id="wishBadge">0</span>
@@ -291,13 +287,8 @@
         </div>
     </div>
 
-    <!-- ADMIN PANEL MOVED TO ADMIN.HTML -->
-    <!-- To manage products, visit admin.html -->
-
-    <!-- PVZ PICKER -->
-    <div id="pvzPickerContainer"></div>
-
-    <script src="/public/pvz-picker.js"></script>
+    <!-- ✅ ПОДКЛЮЧАЕМ ИСПРАВЛЕННЫЙ СКРИПТ -->
+    <script src="/pvz-picker.js"></script>
 
     <script>
         const SUPABASE_URL = 'https://gfczuydwmkiyizeurxvu.supabase.co';
@@ -314,9 +305,6 @@
         let products = [];
         let isAdmin = false;
 
-        // ADMIN PANEL URL
-        const adminUrl = 'admin.html';
-
         // LOAD PRODUCTS FROM SUPABASE
         async function loadProducts() {
             try {
@@ -328,14 +316,10 @@
                 products = data || [];
                 renderGallery();
                 renderCatalog();
-                renderAdminList();
             } catch (error) {
                 console.error('Ошибка загрузки товаров:', error);
             }
         }
-
-        // PRODUCT MANAGEMENT MOVED TO ADMIN.HTML
-        // See admin.html for adding/editing/deleting products
 
         // RENDER GALLERY
         function renderGallery() {
@@ -387,11 +371,6 @@
                 };
                 grid.appendChild(card);
             });
-        }
-
-        // RENDER ADMIN LIST
-        function renderAdminList() {
-            // Функция не требуется для главного сайта
         }
 
         // PRODUCT PAGE
@@ -449,50 +428,23 @@
         // CART
         function addToCart() {
             if (!currentProduct) return;
-            const sizeBtn = document.querySelector('.pp-size-btn.selected');
-            const size = sizeBtn ? sizeBtn.textContent : 'Стандартный';
-            
+            const selectedSize = document.querySelector('.pp-size-btn.selected');
+            if (!selectedSize) {
+                alert('Выберите размер');
+                return;
+            }
+
             cart.push({
-                id: currentProduct.id + Math.random(),
-                productId: currentProduct.id,
+                id: currentProduct.id,
                 name: currentProduct.name,
                 price: currentProduct.price,
-                image: currentProduct.images[0],
-                size: size
+                size: selectedSize.textContent,
+                image: currentProduct.images[0]
             });
 
             updateCart();
             closeProductPage();
-            alert('Товар добавлен в корзину!');
-        }
-
-        function updateCart() {
-            const badge = document.getElementById('cartBadge');
-            badge.textContent = cart.length;
-            if (cart.length > 0) badge.classList.remove('hidden');
-
-            const body = document.getElementById('cartBody');
-            body.innerHTML = '';
-
-            let total = 0;
-            cart.forEach((item, index) => {
-                total += item.price;
-                const div = document.createElement('div');
-                div.className = 'cart-item';
-                div.innerHTML = `
-                    <img class="cart-item-img" src="${item.image}" alt="">
-                    <div class="cart-item-info">
-                        <div class="cart-item-name">${item.name}</div>
-                        <div class="cart-item-meta">Размер: ${item.size}</div>
-                        <div class="cart-item-price">${item.price}₽</div>
-                    </div>
-                    <button class="cart-item-remove" onclick="removeFromCart(${index})">✕</button>
-                `;
-                body.appendChild(div);
-            });
-
-            document.getElementById('cartTotal').textContent = total + '₽';
-            document.getElementById('checkoutTotal').textContent = total;
+            openCart();
         }
 
         function removeFromCart(index) {
@@ -500,62 +452,82 @@
             updateCart();
         }
 
+        function updateCart() {
+            const body = document.getElementById('cartBody');
+            const total = document.getElementById('cartTotal');
+            const badge = document.getElementById('cartBadge');
+            const checkoutTotal = document.getElementById('checkoutTotal');
+
+            body.innerHTML = '';
+            let sum = 0;
+
+            cart.forEach((item, i) => {
+                const div = document.createElement('div');
+                div.className = 'cart-item';
+                div.innerHTML = `
+                    <img src="${item.image}" class="cart-item-img" alt="">
+                    <div class="cart-item-info">
+                        <div class="cart-item-name">${item.name}</div>
+                        <div class="cart-item-meta">${item.size}</div>
+                        <div class="cart-item-price">${item.price}₽</div>
+                    </div>
+                    <button class="cart-item-remove" onclick="removeFromCart(${i})">✕</button>
+                `;
+                body.appendChild(div);
+                sum += item.price;
+            });
+
+            total.textContent = sum + '₽';
+            checkoutTotal.textContent = sum;
+            badge.textContent = cart.length;
+            badge.classList.toggle('hidden', cart.length === 0);
+        }
+
+        // WISHLIST
+        function toggleWish(productId) {
+            const index = wishlist.indexOf(productId);
+            if (index > -1) {
+                wishlist.splice(index, 1);
+            } else {
+                wishlist.push(productId);
+            }
+            updateWishlist();
+            renderCatalog();
+        }
+
+        function updateWishlist() {
+            const body = document.getElementById('wishBody');
+            const badge = document.getElementById('wishBadge');
+
+            body.innerHTML = '';
+            wishlist.forEach(productId => {
+                const product = products.find(p => p.id === productId);
+                if (product) {
+                    const div = document.createElement('div');
+                    div.className = 'cart-item';
+                    div.innerHTML = `
+                        <img src="${product.images[0]}" class="cart-item-img" alt="">
+                        <div class="cart-item-info">
+                            <div class="cart-item-name">${product.name}</div>
+                            <div class="cart-item-price">${product.price}₽</div>
+                        </div>
+                        <button class="cart-item-remove" onclick="toggleWish(${productId})">✕</button>
+                    `;
+                    body.appendChild(div);
+                }
+            });
+
+            badge.textContent = wishlist.length;
+            badge.classList.toggle('hidden', wishlist.length === 0);
+        }
+
+        // SIDEBARS
         function openCart() {
             document.getElementById('cartSidebar').classList.add('open');
         }
 
         function closeCart() {
             document.getElementById('cartSidebar').classList.remove('open');
-        }
-
-        // WISH
-        function toggleWish(productId = null) {
-            const id = productId || (currentProduct ? currentProduct.id : null);
-            if (!id) return;
-
-            const idx = wishlist.indexOf(id);
-            if (idx === -1) {
-                wishlist.push(id);
-            } else {
-                wishlist.splice(idx, 1);
-            }
-
-            updateWish();
-            renderCatalog();
-            if (currentProduct) {
-                const wishBtn = document.getElementById('ppWishBtn');
-                if (wishlist.includes(currentProduct.id)) {
-                    wishBtn.classList.add('liked');
-                } else {
-                    wishBtn.classList.remove('liked');
-                }
-            }
-        }
-
-        function updateWish() {
-            const badge = document.getElementById('wishBadge');
-            badge.textContent = wishlist.length;
-            if (wishlist.length > 0) badge.classList.remove('hidden');
-
-            const body = document.getElementById('wishBody');
-            body.innerHTML = '';
-
-            wishlist.forEach(id => {
-                const product = products.find(p => p.id === id);
-                if (!product) return;
-                
-                const div = document.createElement('div');
-                div.className = 'cart-item';
-                div.innerHTML = `
-                    <img class="cart-item-img" src="${product.images[0]}" alt="">
-                    <div class="cart-item-info">
-                        <div class="cart-item-name">${product.name}</div>
-                        <div class="cart-item-price">${product.price}₽</div>
-                    </div>
-                    <button class="cart-item-remove" onclick="toggleWish(${product.id})">✕</button>
-                `;
-                body.appendChild(div);
-            });
         }
 
         function openWish() {
@@ -568,10 +540,7 @@
 
         // CHECKOUT
         function openCheckout() {
-            if (cart.length === 0) {
-                alert('Корзина пуста');
-                return;
-            }
+            closeCart();
             document.getElementById('checkoutModal').classList.add('open');
         }
 
@@ -579,6 +548,7 @@
             document.getElementById('checkoutModal').classList.remove('open');
         }
 
+        // ✅ ИСПРАВЛЕННАЯ ФУНКЦИЯ updateDeliveryFields
         function updateDeliveryFields() {
             const type = document.getElementById('deliveryType').value;
             const fields = document.getElementById('deliveryFields');
@@ -592,12 +562,18 @@
                     </div>
                 `;
             } else if (type === 'pvz') {
+                // ✅ ПРАВИЛЬНАЯ HTML разметка для ПВЗ пикера
                 fields.innerHTML = `
-                    <div id="pvzPickerHere"></div>
+                    <div class="form-group">
+                        <label class="form-label">Выбор пункта выдачи</label>
+                        <button type="button" id="btn-pvz" class="form-input" style="text-align: left; cursor: pointer; background: #f9f9f9; padding: 12px;">
+                            📍 Нажмите для выбора ПВЗ
+                        </button>
+                    </div>
+                    <div class="form-group">
+                        <input type="text" id="pvz-address" class="form-input" placeholder="Адрес отделения" readonly required>
+                    </div>
                 `;
-                if (window.initPvzSearch) {
-                    window.initPvzSearch();
-                }
             }
         }
 
@@ -619,7 +595,7 @@
                 deliveryInfo = document.getElementById('courierAddress').value;
             } else if (deliveryType === 'pvz') {
                 if (!window.selectedPvz) {
-                    alert('Выберите пункт выдачи');
+                    alert('❌ Выберите пункт выдачи');
                     return;
                 }
                 deliveryInfo = window.selectedPvz.address;
@@ -701,9 +677,6 @@ ${orderData.items.map((item, i) => `${i+1}. ${item}`).join('\n')}
             currentSlide = (currentSlide - 1 + maxSlides) % maxSlides;
             setGallerySlide(currentSlide);
         });
-
-        // ADMIN PANEL MOVED TO ADMIN.HTML
-        // Click the admin icon in nav to access admin.html
 
         // EVENT LISTENERS
         document.getElementById('cartBtn').addEventListener('click', openCart);
