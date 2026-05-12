@@ -15,7 +15,7 @@ const PVZ_CONFIG = {
   cityInputId:    'city',           // id поля "Город"
   addressInputId: 'pvz-address',    // id поля "Адрес отделения"
   buttonId:       'btn-pvz',        // id кнопки
-  apiUrl:         '/get-pvz.php',   // URL эндпоинта
+  jsonUrl:        '/pvz.json',      // URL файла с ПВЗ (НЕ PHP!)
 };
 
 // ──────────────────────────────────────────────
@@ -23,6 +23,8 @@ const PVZ_CONFIG = {
 // ──────────────────────────────────────────────
 (function () {
   'use strict';
+
+  let pvzCache = null;
 
   // Стили модального окна (инлайн, без внешних зависимостей)
   const MODAL_CSS = `
@@ -48,6 +50,9 @@ const PVZ_CONFIG = {
       border-radius:6px; cursor:pointer; font-size:15px; white-space:nowrap;
     }
     #pvz-search-btn:hover { background:#0052a3; }
+    #pvz-search-btn:disabled {
+      background:#ccc; cursor:not-allowed;
+    }
     #pvz-status { font-size:14px; color:#666; min-height:20px; }
     #pvz-list {
       overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:8px;
@@ -103,6 +108,38 @@ const PVZ_CONFIG = {
     return overlay;
   }
 
+  // Загрузка данных ПВЗ из JSON
+  async function loadPvzData() {
+    if (pvzCache) return pvzCache;
+    
+    try {
+      const response = await fetch(PVZ_CONFIG.jsonUrl);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      
+      // Преобразуем структуру {город: [...]} в плоский массив
+      const flattened = [];
+      for (const [city, pvzList] of Object.entries(data)) {
+        if (Array.isArray(pvzList)) {
+          pvzList.forEach(pvz => {
+            flattened.push({
+              city: city,
+              address: pvz.address || '',
+              hours: pvz.hours || '',
+              comment: pvz.comment || ''
+            });
+          });
+        }
+      }
+      
+      pvzCache = flattened;
+      return pvzCache;
+    } catch (err) {
+      console.error('Failed to load PVZ data:', err);
+      throw new Error('Не удалось загрузить список ПВЗ. Проверьте подключение.');
+    }
+  }
+
   function init() {
     const btn = document.getElementById(PVZ_CONFIG.buttonId);
     if (!btn) return;
@@ -145,7 +182,9 @@ const PVZ_CONFIG = {
     confirmBtn.addEventListener('click', () => {
       if (!selectedPvz) return;
       if (addressInput) addressInput.value = selectedPvz.address;
-      // Обновляем поле города, если было нечёткое совпадение
+      // Сохраняем выбранный ПВЗ глобально для использования в форме
+      window.selectedPvz = selectedPvz;
+      // Обновляем поле города
       if (cityInput && selectedPvz.city) cityInput.value = selectedPvz.city;
       close();
     });
@@ -153,30 +192,44 @@ const PVZ_CONFIG = {
     function close() { overlay.classList.remove('active'); }
 
     async function searchPvz(city) {
-      if (!city) { status.textContent = '⚠ Введите название города'; return; }
+      if (!city) { 
+        status.textContent = '⚠ Введите название города'; 
+        return; 
+      }
 
       status.textContent = '🔍 Поиск…';
       list.innerHTML = '';
       confirmBtn.style.display = 'none';
       selectedPvz = null;
+      searchBtn.disabled = true;
 
       try {
-        const resp = await fetch(`${PVZ_CONFIG.apiUrl}?city=${encodeURIComponent(city)}`);
-        const data = await resp.json();
+        const allPvz = await loadPvzData();
+        
+        // Фильтруем ПВЗ по городу (поиск не зависит от регистра)
+        const filtered = allPvz.filter(pvz => 
+          pvz.city.toLowerCase().includes(city.toLowerCase())
+        );
 
-        if (data.error) { status.textContent = '❌ ' + data.error; return; }
-        if (!Array.isArray(data) || data.length === 0) {
-          status.textContent = `Пункты выдачи для «${city}» не найдены. Попробуйте другой город.`;
+        if (filtered.length === 0) {
+          status.textContent = `❌ Пункты выдачи для «${city}» не найдены. Доступные города:`;
+          
+          // Показываем список доступных городов
+          const cities = [...new Set(allPvz.map(p => p.city))].sort();
+          const cityList = cities.slice(0, 10).join(', ');
+          const note = cities.length > 10 ? '...' : '';
+          status.innerHTML += `<br><small style="color:#999">Попробуйте: ${cityList}${note}</small>`;
+          searchBtn.disabled = false;
           return;
         }
 
-        status.textContent = `Найдено ${data.length} пунктов выдачи:`;
-        data.forEach(pvz => {
+        status.textContent = `Найдено ${filtered.length} пунктов выдачи в «${city}»:`;
+        filtered.forEach(pvz => {
           const el = document.createElement('div');
           el.className = 'pvz-item';
           el.innerHTML = `
             <div class="pvz-item-address">📍 ${pvz.address || '—'}</div>
-            ${pvz.city ? `<div class="pvz-item-city">${pvz.city}</div>` : ''}
+            <div class="pvz-item-city">${pvz.city}</div>
             ${pvz.hours   ? `<div class="pvz-item-hours">🕐 ${pvz.hours}</div>` : ''}
             ${pvz.comment ? `<div class="pvz-item-comment">${pvz.comment}</div>` : ''}
           `;
@@ -189,9 +242,11 @@ const PVZ_CONFIG = {
           });
           list.appendChild(el);
         });
+        searchBtn.disabled = false;
       } catch (err) {
-        status.textContent = '❌ Ошибка сети. Проверьте подключение.';
-        console.error('PVZ fetch error:', err);
+        status.textContent = '❌ ' + err.message;
+        console.error('PVZ search error:', err);
+        searchBtn.disabled = false;
       }
     }
   }
